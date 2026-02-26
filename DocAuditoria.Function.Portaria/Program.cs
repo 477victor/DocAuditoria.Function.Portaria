@@ -2,6 +2,9 @@ using DocAuditoria.Function.Portaria.Interfaces;
 using DocAuditoria.Function.Portaria.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using OfficeOpenXml;
+
+ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
 
 var host = new HostBuilder()
@@ -11,7 +14,7 @@ var host = new HostBuilder()
         services.AddHttpClient("ValideApi", client =>
         {
             client.Timeout = TimeSpan.FromMinutes(20);
-            client.BaseAddress = new Uri("https://localhost:5001/");
+            client.BaseAddress = new Uri("https://valide-api-v1.azurewebsites.net");
 
 
             client.DefaultRequestHeaders.Add("Accept", "application/json");

@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace DocAuditoria.Function.Portaria.Services
@@ -81,5 +82,93 @@ namespace DocAuditoria.Function.Portaria.Services
 
             return bagResultados.ToList();
         }
+
+        public async Task CriarItensPendentesAsync(Guid solicitacaoId, List<int> funcionarioIds)
+        {
+            await _client.PostAsJsonAsync($"api/ValideInternal/solicitacao/{solicitacaoId}/registrar-itens", funcionarioIds);
+        }
+
+        public async Task<FuncionarioValidadePortariaViewModel> ValidarFuncionarioIndividualAsync(int empresaId, int funcionarioId)
+        {
+            var response = await _client.PostAsJsonAsync("api/ValideInternal/validar-lote-relatorio", new
+            {
+                EmpresaId = empresaId,
+                FuncionarioIds = new List<int> { funcionarioId }
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var lista = await response.Content.ReadFromJsonAsync<List<FuncionarioValidadePortariaViewModel>>();
+                return lista?.FirstOrDefault();
+            }
+            return null;
+        }
+
+        public async Task<bool> AtualizarItemEVerificarFinalizacaoAsync(Guid solicitacaoId, int funcionarioId, FuncionarioValidadePortariaViewModel resultado)
+        {
+            var response = await _client.PutAsJsonAsync($"api/ValideInternal/solicitacao/{solicitacaoId}/item/{funcionarioId}/concluir", resultado);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonDoc = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+                if (jsonDoc.TryGetProperty("finalizouSolicitacao", out var prop))
+                {
+                    return prop.GetBoolean();
+                }
+            }
+
+            _logger.LogWarning($"[API] Falha ao concluir item {funcionarioId}. Status: {response.StatusCode}");
+            return false;
+        }
+
+        public async Task<List<FuncionarioValidadePortariaViewModel>> ObterResultadosConsolidadosAsync(Guid solicitacaoId)
+        {
+            var response = await _client.GetAsync($"api/ValideInternal/solicitacao/{solicitacaoId}/consolidado");
+            if (!response.IsSuccessStatusCode) return new List<FuncionarioValidadePortariaViewModel>();
+            return await response.Content.ReadFromJsonAsync<List<FuncionarioValidadePortariaViewModel>>();
+        }
+
+        public async Task<string> ValidarStatusBloqueioNaValideAsync(int empresaId, string funcionarioId)
+        {
+            try
+            {
+                // O HttpClient já deve estar configurado com a BaseAddress da API da Valide
+                // Conforme seu script Node: GET em fiscalization/check-entrance-device/{id}
+                var response = await _client.GetAsync($"api/fiscalization/check-entrance-device/{funcionarioId}");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return await response.Content.ReadAsStringAsync();
+                }
+
+                return $"{{ \"liberado\": false, \"erro\": \"Status API: {response.StatusCode}\" }}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Erro ao validar bloqueio na Valide: {ex.Message}");
+                return $"{{ \"liberado\": false, \"erro\": \"{ex.Message}\" }}";
+            }
+        }
+
+        public async Task<bool> AtualizarItemEVerificarFinalizacaoAsync(Guid solicitacaoId, int funcionarioId, string resultado)
+        {
+            // Criamos um objeto temporário para enviar o resultado como StatusLiberacao
+            var payload = new { StatusLiberacao = resultado };
+
+            var response = await _client.PutAsJsonAsync($"api/ValideInternal/solicitacao/{solicitacaoId}/item/{funcionarioId}/concluir", payload);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonDoc = await response.Content.ReadFromJsonAsync<JsonElement>();
+                if (jsonDoc.TryGetProperty("finalizouSolicitacao", out var prop))
+                {
+                    return prop.GetBoolean();
+                }
+            }
+
+            return false;
+        }
+
     }
 }
