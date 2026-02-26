@@ -9,7 +9,7 @@ namespace DocAuditoria.Function.Portaria.Models
     public class FiltroRelatorioDto
     {
         public int EmpresaId { get; set; }
-        public int? EstabelecimentoId { get; set; }
+        public int? UnidadeId { get; set; }
         public int? PortariaId { get; set; }        
         public int? FornecedorId { get; set; }     
         public bool? BloqueioEstabelecimento { get; set; } 

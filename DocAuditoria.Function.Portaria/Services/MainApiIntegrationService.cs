@@ -48,7 +48,7 @@ namespace DocAuditoria.Function.Portaria.Services
             }
             else if (origem.Equals("Bloqueio", StringComparison.OrdinalIgnoreCase))
             {
-                dto.EstabelecimentoId = idOrigem;
+                dto.UnidadeId = idOrigem;
             }
 
             var response = await _client.PostAsJsonAsync("api/ValideInternal/listar-ids-funcionario", dto);

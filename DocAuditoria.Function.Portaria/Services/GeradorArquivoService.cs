@@ -39,38 +39,59 @@ namespace DocAuditoria.Function.Portaria.Services
             private readonly XLColor LIGHT_RED_BG = XLColor.FromHtml("#FDEDEC");
             private readonly XLColor HEADER_TEXT_COLOR = XLColor.White;
 
-            public MemoryStream GerarExcelBloqueiosEstilizado(List<FuncionarioValidadePortariaViewModel> dados)
+        public MemoryStream GerarExcelBloqueiosEstilizado(List<FuncionarioValidadePortariaViewModel> dados)
+        {
+            var ms = new MemoryStream();
+            using (var wb = new XLWorkbook())
             {
-                var ms = new MemoryStream();
-                using (var wb = new XLWorkbook())
-                {
-                    var listaProcessada = dados.Select(d => {
-                        bool liberado = false;
-                        string statusTxt = "Erro ao analisar";
+                var listaProcessada = dados.Select(d => {
+                    bool liberado = false;
+                    string statusTxt = "Bloqueado";
+                    string nomeExtraido = d.NomeFuncionario;
+                    int idExtraido = d.FuncionarioId;
 
-                        if (!string.IsNullOrEmpty(d.StatusLiberacao))
+                    if (!string.IsNullOrEmpty(d.StatusLiberacao) && d.StatusLiberacao.Trim().StartsWith("{"))
+                    {
+                        try
                         {
-                            try
-                            {
-                                var json = JObject.Parse(d.StatusLiberacao);
-                                liberado = json["liberado"]?.Value<bool>() ?? false;
-                                statusTxt = liberado ? "Liberado" : "Bloqueado";
-                            }
-                            catch { }
+                            var json = JObject.Parse(d.StatusLiberacao);
+
+                            liberado = json["liberado"]?.Value<bool>() ?? false;
+                            statusTxt = liberado ? "Liberado" : "Bloqueado";
+
+                            if (string.IsNullOrWhiteSpace(nomeExtraido))
+                                nomeExtraido = json["nomeFuncionario"]?.Value<string>();
+
+                            if (idExtraido == 0)
+                                idExtraido = json["funcionarioId"]?.Value<int>() ?? 0;
+
+                            d.NomeFuncionario = nomeExtraido;
+                            d.FuncionarioId = idExtraido;
                         }
-                        return new { Item = d, IsLiberado = liberado, StatusText = statusTxt };
-                    }).ToList();
+                        catch
+                        {
+                            statusTxt = "Erro no Status";
+                        }
+                    }
+                    else
+                    {
+                        liberado = d.StatusLiberacao?.Equals("Liberado", StringComparison.OrdinalIgnoreCase) ?? false;
+                        statusTxt = liberado ? "Liberado" : "Bloqueado";
+                    }
 
-                    CriarAbaResumo(wb, listaProcessada);
-                    CriarAbaDados(wb, "Todos Funcionários", VALIDE_LIGHT_BLUE, listaProcessada);
-                    CriarAbaDados(wb, "Liberados", VALIDE_GREEN, listaProcessada.Where(x => x.IsLiberado).ToList());
-                    CriarAbaDados(wb, "Bloqueados", VALIDE_RED, listaProcessada.Where(x => !x.IsLiberado).ToList());
-                    CriarAbaFornecedor(wb, listaProcessada);
+                    return new { Item = d, IsLiberado = liberado, StatusText = statusTxt };
+                }).ToList();
 
-                    wb.SaveAs(ms);
-                }
-                return ms;
+                CriarAbaResumo(wb, listaProcessada);
+                CriarAbaDados(wb, "Todos Funcionários", VALIDE_LIGHT_BLUE, listaProcessada);
+                CriarAbaDados(wb, "Liberados", VALIDE_GREEN, listaProcessada.Where(x => x.IsLiberado).ToList());
+                CriarAbaDados(wb, "Bloqueados", VALIDE_RED, listaProcessada.Where(x => !x.IsLiberado).ToList());
+                CriarAbaFornecedor(wb, listaProcessada);
+
+                wb.SaveAs(ms);
             }
+            return ms;
+        }
 
         private void CriarAbaResumo(XLWorkbook wb, dynamic lista)
         {
