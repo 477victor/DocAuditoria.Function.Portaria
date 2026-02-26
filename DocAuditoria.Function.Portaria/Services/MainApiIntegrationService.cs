@@ -5,6 +5,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -16,7 +17,7 @@ namespace DocAuditoria.Function.Portaria.Services
     {
         private readonly HttpClient _client;
         private readonly ILogger<MainApiIntegrationService> _logger;
-
+        private string _cachedToken = string.Empty;
         public MainApiIntegrationService(IHttpClientFactory httpClientFactory, ILogger<MainApiIntegrationService> logger)
         {
             _client = httpClientFactory.CreateClient("ValideApi");
@@ -88,22 +89,6 @@ namespace DocAuditoria.Function.Portaria.Services
             await _client.PostAsJsonAsync($"api/ValideInternal/solicitacao/{solicitacaoId}/registrar-itens", funcionarioIds);
         }
 
-        public async Task<FuncionarioValidadePortariaViewModel> ValidarFuncionarioIndividualAsync(int empresaId, int funcionarioId)
-        {
-            var response = await _client.PostAsJsonAsync("api/ValideInternal/validar-lote-relatorio", new
-            {
-                EmpresaId = empresaId,
-                FuncionarioIds = new List<int> { funcionarioId }
-            });
-
-            if (response.IsSuccessStatusCode)
-            {
-                var lista = await response.Content.ReadFromJsonAsync<List<FuncionarioValidadePortariaViewModel>>();
-                return lista?.FirstOrDefault();
-            }
-            return null;
-        }
-
         public async Task<bool> AtualizarItemEVerificarFinalizacaoAsync(Guid solicitacaoId, int funcionarioId, FuncionarioValidadePortariaViewModel resultado)
         {
             var response = await _client.PutAsJsonAsync($"api/ValideInternal/solicitacao/{solicitacaoId}/item/{funcionarioId}/concluir", resultado);
@@ -129,31 +114,64 @@ namespace DocAuditoria.Function.Portaria.Services
             return await response.Content.ReadFromJsonAsync<List<FuncionarioValidadePortariaViewModel>>();
         }
 
+        public async Task<FuncionarioValidadePortariaViewModel> ValidarFuncionarioIndividualAsync(int empresaId, int funcionarioId)
+        {
+            var payload = new
+            {
+                EmpresaId = empresaId,
+                UsuarioId = 7, 
+                FuncionarioId = funcionarioId, 
+                IgnoraDocumentacao = false
+            };
+
+            var response = await _client.PostAsJsonAsync("api/ValideInternal/validar-lote-relatorio", payload);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var resultado = await response.Content.ReadFromJsonAsync<FuncionarioValidadePortariaViewModel>();
+                return resultado;
+            }
+
+            _logger.LogError($"[PORTARIA] Falha na API Interna: {response.StatusCode}");
+            return null;
+        }
+
         public async Task<string> ValidarStatusBloqueioNaValideAsync(int empresaId, string funcionarioId)
         {
-            try
-            {
-                // O HttpClient já deve estar configurado com a BaseAddress da API da Valide
-                // Conforme seu script Node: GET em fiscalization/check-entrance-device/{id}
-                var response = await _client.GetAsync($"api/fiscalization/check-entrance-device/{funcionarioId}");
+            string token = await ObterTokenValideAsync();
+            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await _client.GetAsync($"api/fiscalization/check-entrance-device/{funcionarioId}");
+            return await response.Content.ReadAsStringAsync(); 
+        }
+        private async Task<string> ObterTokenValideAsync()
+        {
 
-                if (response.IsSuccessStatusCode)
-                {
-                    return await response.Content.ReadAsStringAsync();
-                }
+            if (!string.IsNullOrEmpty(_cachedToken)) return _cachedToken;
 
-                return $"{{ \"liberado\": false, \"erro\": \"Status API: {response.StatusCode}\" }}";
-            }
-            catch (Exception ex)
+            var loginPayload = new
             {
-                _logger.LogError($"Erro ao validar bloqueio na Valide: {ex.Message}");
-                return $"{{ \"liberado\": false, \"erro\": \"{ex.Message}\" }}";
+                email = "samanta.marcolino@validesolucoes.com.br",
+                password = "12345",
+                apiKey = "713CE135-9F48-46F1-993A-2D153EE5023F"
+            };
+
+            var response = await _client.PostAsJsonAsync("https://valide-api-v1.azurewebsites.net/api/auth/login", loginPayload);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadFromJsonAsync<JsonElement>();
+                _cachedToken = content.TryGetProperty("token", out var t) ? t.GetString() :
+                               content.TryGetProperty("accessToken", out var at) ? at.GetString() :
+                               content.TryGetProperty("tokenAPI", out var tapi) ? tapi.GetString() : string.Empty;
+
+                return _cachedToken;
             }
+
+            throw new Exception($"Falha na autenticação com a API Valide: {response.StatusCode}");
         }
 
         public async Task<bool> AtualizarItemEVerificarFinalizacaoAsync(Guid solicitacaoId, int funcionarioId, string resultado)
         {
-            // Criamos um objeto temporário para enviar o resultado como StatusLiberacao
             var payload = new { StatusLiberacao = resultado };
 
             var response = await _client.PutAsJsonAsync($"api/ValideInternal/solicitacao/{solicitacaoId}/item/{funcionarioId}/concluir", payload);

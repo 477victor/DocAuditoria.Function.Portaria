@@ -25,14 +25,41 @@ namespace DocAuditoria.Function.Portaria
 
         [Function("Bloqueio_Step1_Distribuidor")]
         public async Task<Step1BloqueioOutput> RunStep1(
-            [ServiceBusTrigger("topico-solicitacao-bloqueio", "sub-worker-bloqueio", Connection = "ServiceBusConnection", AutoCompleteMessages = false)]
-            ServiceBusReceivedMessage message, ServiceBusMessageActions messageActions)
+        [ServiceBusTrigger("topico-solicitacao-bloqueio", "sub-worker-bloqueio", Connection = "ServiceBusConnection", AutoCompleteMessages = false)]
+        ServiceBusReceivedMessage message, ServiceBusMessageActions messageActions)
         {
-            var payload = message.Body.ToObjectFromJson<RelatorioBloqueioMessage>();
-            var ids = await _apiService.ObterTodosIdsAsync(payload.EmpresaId, payload.EstabelecimentoId);
-            await _apiService.CriarItensPendentesAsync(payload.SolicitacaoId, ids);
+            var bodyString = message.Body.ToString();
+            if (string.IsNullOrEmpty(bodyString))
+            {
+                await messageActions.DeadLetterMessageAsync(message);
+                return null;
+            }
 
-            var mensagens = ids.Select(id => JsonSerializer.Serialize(new ItemBloqueioMessage
+            var payload = message.Body.ToObjectFromJson<RelatorioBloqueioMessage>();
+
+            if (payload == null || payload.EstabelecimentosIds == null)
+            {
+                payload.EstabelecimentosIds = new List<int>();
+            }
+
+            var todosIdsFuncionarios = new HashSet<int>();
+
+            foreach (var estId in payload.EstabelecimentosIds)
+            {
+                var idsDoEstabelecimento = await _apiService.ObterTodosIdsAsync(payload.EmpresaId, estId);
+
+                if (idsDoEstabelecimento != null)
+                {
+                    foreach (var funcId in idsDoEstabelecimento)
+                    {
+                        todosIdsFuncionarios.Add(funcId);
+                    }
+                }
+            }
+
+            await _apiService.CriarItensPendentesAsync(payload.SolicitacaoId, todosIdsFuncionarios.ToList());
+
+            var mensagens = todosIdsFuncionarios.Select(id => JsonSerializer.Serialize(new ItemBloqueioMessage
             {
                 SolicitacaoId = payload.SolicitacaoId,
                 FuncionarioId = id.ToString(),
@@ -45,20 +72,20 @@ namespace DocAuditoria.Function.Portaria
 
         [Function("Bloqueio_Step2_Verificador")]
         public async Task<Step2BloqueioOutput> RunStep2(
-            [ServiceBusTrigger("fila-processamento-bloqueio", Connection = "ServiceBusConnection", AutoCompleteMessages = false)]
-            ServiceBusReceivedMessage message, ServiceBusMessageActions messageActions)
+         [ServiceBusTrigger("fila-processamento-bloqueio", Connection = "ServiceBusConnection", AutoCompleteMessages = false)]
+         ServiceBusReceivedMessage message, ServiceBusMessageActions messageActions)
         {
             var item = message.Body.ToObjectFromJson<ItemBloqueioMessage>();
 
-            var resultado = await _apiService.ValidarStatusBloqueioNaValideAsync(
+            var resultadoJson = await _apiService.ValidarStatusBloqueioNaValideAsync(
                 item.EmpresaId,
-                item.FuncionarioId 
+                item.FuncionarioId
             );
 
             bool finalizou = await _apiService.AtualizarItemEVerificarFinalizacaoAsync(
                 item.SolicitacaoId,
-                int.Parse(item.FuncionarioId), 
-                resultado 
+                int.Parse(item.FuncionarioId),
+                resultadoJson
             );
 
             string? output = finalizou ? JsonSerializer.Serialize(new { SolicitacaoId = item.SolicitacaoId }) : null;
@@ -69,8 +96,7 @@ namespace DocAuditoria.Function.Portaria
         [Function("Bloqueio_Step3_GeradorExcel")]
         public async Task RunStep3(
             [ServiceBusTrigger("fila-geracao-bloqueio-excel", Connection = "ServiceBusConnection", AutoCompleteMessages = false)]
-            ServiceBusReceivedMessage message,
-            ServiceBusMessageActions messageActions)
+            ServiceBusReceivedMessage message, ServiceBusMessageActions messageActions)
         {
             var final = message.Body.ToObjectFromJson<FinalizarRelatorioMessage>();
 
@@ -83,9 +109,9 @@ namespace DocAuditoria.Function.Portaria
                 await _emailService.EnviarEmailComAnexoAsync(
                     info.EmailDestino,
                     "Relatório de Bloqueios Valide",
-                    "Segue em anexo o relatório solicitado.",
+                    "Segue em anexo o relatório detalhado de bloqueios consolidado por estabelecimento.",
                     stream,
-                    $"Relatorio_Bloqueios_{final.SolicitacaoId}.xlsx",
+                    $"Relatorio_Bloqueios_{DateTime.Now:yyyyMMdd}.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 );
             }

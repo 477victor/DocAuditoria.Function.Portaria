@@ -15,10 +15,10 @@ namespace DocAuditoria.Function.Portaria.Interfaces
 
         Task CriarItensPendentesAsync(Guid solicitacaoId, List<int> funcionarioIds);
         Task<FuncionarioValidadePortariaViewModel> ValidarFuncionarioIndividualAsync(int empresaId, int funcionarioId);
+        Task<string> ValidarStatusBloqueioNaValideAsync(int empresaId, string funcionarioId);
         Task<bool> AtualizarItemEVerificarFinalizacaoAsync(Guid solicitacaoId, int funcionarioId, FuncionarioValidadePortariaViewModel resultado);
         Task<List<FuncionarioValidadePortariaViewModel>> ObterResultadosConsolidadosAsync(Guid solicitacaoId);
 
-        Task<string> ValidarStatusBloqueioNaValideAsync(int empresaId, string funcionarioId);
         Task<bool> AtualizarItemEVerificarFinalizacaoAsync(Guid solicitacaoId, int funcionarioId, string resultado);    
     }
 }
