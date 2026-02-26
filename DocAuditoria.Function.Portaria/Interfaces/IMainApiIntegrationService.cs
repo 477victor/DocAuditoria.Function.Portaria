@@ -11,7 +11,7 @@ namespace DocAuditoria.Function.Portaria.Interfaces
     {
         Task<SolicitacaoDto?> GetSolicitacaoAsync(Guid id);
         Task AtualizarStatusAsync(Guid id, string status, string erro = null);
-        Task<List<int>> ObterTodosIdsAsync(int empresaId, int? estabelecimentoId);
+        Task<List<int>> ObterTodosIdsAsync(int empresaId, int? idOrigem, string origem);
 
         Task CriarItensPendentesAsync(Guid solicitacaoId, List<int> funcionarioIds);
         Task<FuncionarioValidadePortariaViewModel> ValidarFuncionarioIndividualAsync(int empresaId, int funcionarioId);

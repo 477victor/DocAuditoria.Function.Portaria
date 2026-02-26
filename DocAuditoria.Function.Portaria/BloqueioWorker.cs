@@ -46,7 +46,8 @@ namespace DocAuditoria.Function.Portaria
 
             foreach (var estId in payload.EstabelecimentosIds)
             {
-                var idsDoEstabelecimento = await _apiService.ObterTodosIdsAsync(payload.EmpresaId, estId);
+                // Passamos o id como Estabelecimento/Unidade
+                var idsDoEstabelecimento = await _apiService.ObterTodosIdsAsync(payload.EmpresaId, estId, "Bloqueio");
 
                 if (idsDoEstabelecimento != null)
                 {

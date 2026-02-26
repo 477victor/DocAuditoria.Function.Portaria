@@ -37,13 +37,28 @@ namespace DocAuditoria.Function.Portaria.Services
             await _client.PutAsJsonAsync("api/ValideInternal/solicitacao/status", payload);
         }
 
-        public async Task<List<int>> ObterTodosIdsAsync(int empresaId, int? estabelecimentoId)
+        public async Task<List<int>> ObterTodosIdsAsync(int empresaId, int? idOrigem, string origem)
         {
-            var dto = new FiltroRelatorioDto { EmpresaId = empresaId, EstabelecimentoId = estabelecimentoId };
+            var dto = new FiltroRelatorioDto { EmpresaId = empresaId };
+
+            // Lógica condicional baseada na origem dos dados
+            if (origem.Equals("Portaria", StringComparison.OrdinalIgnoreCase))
+            {
+                dto.FornecedorId = idOrigem;
+            }
+            else if (origem.Equals("Bloqueio", StringComparison.OrdinalIgnoreCase))
+            {
+                dto.EstabelecimentoId = idOrigem;
+            }
+
             var response = await _client.PostAsJsonAsync("api/ValideInternal/listar-ids-funcionario", dto);
 
-            if (!response.IsSuccessStatusCode) return new List<int>();
-            return await response.Content.ReadFromJsonAsync<List<int>>();
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadFromJsonAsync<List<int>>();
+            }
+
+            return new List<int>();
         }
 
         public async Task<List<FuncionarioValidadeResultViewModel>> ProcessarLotesAsync(RelatorioQueueMessage pedido, List<int> todosIds)

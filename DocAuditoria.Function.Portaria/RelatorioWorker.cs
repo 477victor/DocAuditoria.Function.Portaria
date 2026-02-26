@@ -42,7 +42,8 @@ namespace DocAuditoria.Function.Portaria
                 _logger.LogInformation($"[STEP 1] Iniciando Distribuição: {payload.SolicitacaoId}");
 
                 await _apiService.AtualizarStatusAsync(payload.SolicitacaoId, "DISTRIBUINDO");
-                var ids = await _apiService.ObterTodosIdsAsync(payload.EmpresaId, payload.EstabelecimentoId);
+
+                var ids = await _apiService.ObterTodosIdsAsync(payload.EmpresaId, payload.EstabelecimentoId, "Portaria");
 
                 await _apiService.CriarItensPendentesAsync(payload.SolicitacaoId, ids);
 

@@ -23,5 +23,7 @@ namespace DocAuditoria.Function.Portaria.Models
         public string StatusLiberacao { get; set; }
         public int? FornecedorId { get; set; }
         public string Contrato { get; set; }
+        public string Local { get; set; }
+
     }
 }
