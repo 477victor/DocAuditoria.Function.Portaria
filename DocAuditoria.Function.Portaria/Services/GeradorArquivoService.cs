@@ -23,6 +23,7 @@ namespace DocAuditoria.Function.Portaria.Services
         {
             { "NomeFuncionario", "NOME" },
             { "NomeFornecedor", "FORNECEDOR" },
+            { "Local", "LOCAL" },
             { "Matricula", "MATRÍCULA" },
             { "Funcao", "FUNÇÃO" },
             { "Contrato", "CONTRATO" },
@@ -99,9 +100,19 @@ namespace DocAuditoria.Function.Portaria.Services
             ws.TabColor = VALIDE_BLUE;
 
             var listaProcessada = ((IEnumerable<dynamic>)lista).ToList();
-            int total = listaProcessada.Count;
-            int liberados = listaProcessada.Count(x => x.IsLiberado);
-            int bloqueados = total - liberados;
+
+
+            var resumoUnico = listaProcessada
+                .GroupBy(x => x.Item.FuncionarioId)
+                .Select(g => new {
+                    Id = g.Key,
+                    IsLiberado = g.All(x => x.IsLiberado)
+                }).ToList();
+
+            int totalUnico = resumoUnico.Count;
+            int liberadosUnicos = resumoUnico.Count(x => x.IsLiberado);
+            int bloqueadosUnicos = totalUnico - liberadosUnicos;
+            // ---------------------------------
 
             var headerRange = ws.Range("B2:E2");
             headerRange.Merge().Value = "Relatório de Status de Funcionários";
@@ -110,15 +121,15 @@ namespace DocAuditoria.Function.Portaria.Services
             headerRange.Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
             ws.Row(2).Height = 45;
 
-            ws.Range("B3:E3").Merge().Value = $"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}";
+            ws.Range("B3:E3").Merge().Value = $"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm} | Total de Pessoas: {totalUnico}";
             ws.Cell(3, 2).Style.Font.SetItalic().Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
 
-            RenderizarLinhaDashboard(ws, 5, "Total de Funcionários", total, VALIDE_LIGHT_BLUE);
-            RenderizarLinhaDashboard(ws, 6, "Liberados", liberados, VALIDE_GREEN);
-            RenderizarLinhaDashboard(ws, 7, "Bloqueados", bloqueados, VALIDE_RED);
+            RenderizarLinhaDashboard(ws, 5, "Total de Funcionários", totalUnico, VALIDE_LIGHT_BLUE);
+            RenderizarLinhaDashboard(ws, 6, "Liberados", liberadosUnicos, VALIDE_GREEN);
+            RenderizarLinhaDashboard(ws, 7, "Bloqueados", bloqueadosUnicos, VALIDE_RED);
 
-            double percLib = total > 0 ? (double)liberados / total : 0;
-            double percBloq = total > 0 ? (double)bloqueados / total : 0;
+            double percLib = totalUnico > 0 ? (double)liberadosUnicos / totalUnico : 0;
+            double percBloq = totalUnico > 0 ? (double)bloqueadosUnicos / totalUnico : 0;
 
             ws.Cell(9, 2).Value = "% Liberados";
             ws.Cell(9, 2).Style.Font.SetBold();
@@ -127,14 +138,12 @@ namespace DocAuditoria.Function.Portaria.Services
             cellPercLib.Style.NumberFormat.Format = "0.0%";
             cellPercLib.Style.Font.SetBold().Font.SetFontSize(14).Font.SetFontColor(VALIDE_GREEN);
 
-            // Percentual Bloqueados
             ws.Cell(10, 2).Value = "% Bloqueados";
             ws.Cell(10, 2).Style.Font.SetBold();
             var cellPercBloq = ws.Cell(10, 3);
             cellPercBloq.Value = percBloq;
             cellPercBloq.Style.NumberFormat.Format = "0.0%";
             cellPercBloq.Style.Font.SetBold().Font.SetFontSize(14).Font.SetFontColor(VALIDE_RED);
-
 
             ws.Columns(2, 5).AdjustToContents();
             ws.Column(3).Width = 20;
@@ -166,7 +175,7 @@ namespace DocAuditoria.Function.Portaria.Services
             var ws = wb.Worksheets.Add(nome);
             ws.TabColor = tabColor;
 
-            string[] headers = { "#", "ID Funcionário", "Nome", "Fornecedor", "Status" };
+            string[] headers = { "#", "ID Funcionário", "Nome", "Local", "Fornecedor", "Status" };
             for (int i = 0; i < headers.Length; i++)
             {
                 var cell = ws.Cell(1, i + 1);
@@ -180,12 +189,16 @@ namespace DocAuditoria.Function.Portaria.Services
                 ws.Cell(r, 1).Value = r - 1;
                 ws.Cell(r, 2).Value = (d.Item.FuncionarioId ?? 0).ToString();
                 ws.Cell(r, 3).Value = (d.Item.NomeFuncionario ?? "").ToString();
-                ws.Cell(r, 4).Value = (d.Item.NomeFornecedor ?? "Sem Fornecedor").ToString();
-                ws.Cell(r, 5).Value = (d.StatusText ?? "N/A").ToString();
 
-                var rowRange = ws.Range(r, 1, r, 5);
+                ws.Cell(r, 4).Value = (d.Item.Local ?? "").ToString();
+
+                ws.Cell(r, 5).Value = (d.Item.NomeFornecedor ?? "Sem Fornecedor").ToString();
+                ws.Cell(r, 6).Value = (d.StatusText ?? "N/A").ToString();
+
+                var rowRange = ws.Range(r, 1, r, 6);
                 rowRange.Style.Fill.SetBackgroundColor(d.IsLiberado ? LIGHT_GREEN_BG : LIGHT_RED_BG);
-                ws.Cell(r, 5).Style.Font.SetBold().Font.SetFontColor(d.IsLiberado ? VALIDE_GREEN : VALIDE_RED);
+
+                ws.Cell(r, 6).Style.Font.SetBold().Font.SetFontColor(d.IsLiberado ? VALIDE_GREEN : VALIDE_RED);
                 r++;
             }
             ws.Columns().AdjustToContents();
