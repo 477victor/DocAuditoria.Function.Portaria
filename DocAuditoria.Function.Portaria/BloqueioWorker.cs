@@ -104,16 +104,25 @@ namespace DocAuditoria.Function.Portaria
             var dados = await _apiService.ObterResultadosConsolidadosAsync(final.SolicitacaoId);
             var info = await _apiService.GetSolicitacaoAsync(final.SolicitacaoId);
 
+            var locaisDistintos = dados.Select(x => x.Local).Distinct().Where(l => !string.IsNullOrEmpty(l)).ToList();
+            string textoLocal = locaisDistintos.Count > 1 ? "TODOS" : (locaisDistintos.FirstOrDefault() ?? "Geral");
+
+            string dataEnvio = DateTime.Now.ToString("dd/MM/yyyy");
+
             using (var stream = _geradorService.GerarExcelBloqueiosEstilizado(dados))
             {
                 stream.Position = 0;
+
+                string assuntoEmail = $"Relatório de Bloqueios Valide - {textoLocal} ({dataEnvio})";
+
                 await _emailService.EnviarEmailComAnexoAsync(
                     info.EmailDestino,
-                    "Relatório de Bloqueios Valide",
-                    "Segue em anexo o relatório detalhado de bloqueios consolidado por estabelecimento.",
+                    assuntoEmail,
+                    $"Olá, segue em anexo o relatório consolidado referente ao local: {textoLocal}. Gerado em: {dataEnvio}.",
                     stream,
-                    $"Relatorio_Bloqueios_{DateTime.Now:yyyyMMdd}.xlsx",
+                    $"Relatorio_Bloqueio_{textoLocal}_{DateTime.Now:yyyyMMdd}.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
                 );
             }
 
